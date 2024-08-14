@@ -3,23 +3,26 @@ pub mod models;
 pub mod unofficial;
 
 use std::{
-    collections::{BTreeMap, HashMap},
-    io::{BufRead, BufReader, BufWriter},
+    io::{BufReader, BufWriter},
     sync::Arc,
 };
 
 use reqwest::{
     header::{self, HeaderValue},
     redirect::Policy,
-    StatusCode,
 };
-use reqwest_cookie_store::CookieStoreMutex;
 use rustls::{
-    cipher_suite::{
-        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
+    crypto::{
+        aws_lc_rs::{
+            self,
+            cipher_suite::{
+                TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
+            },
+        },
+        CryptoProvider,
     },
     version::TLS13,
-    RootCertStore, ALL_KX_GROUPS,
+    ClientConfig,
 };
 
 use crate::val_api::models::{EntitlementsTokenResponse, RegionRequest, RegionResponse};
@@ -29,7 +32,7 @@ use self::models::{
 };
 
 const USER_AGENT: HeaderValue = HeaderValue::from_static(
-    "RiotClient/51.0.0.4429735.4381201 rso-auth (Windows;10;;Professional, x64)",
+    "RiotClient/92.0.0.1904.3969 rso-auth (Windows;10;;Professional, x64)",
 );
 
 const CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/json");
@@ -54,25 +57,24 @@ pub async fn authenticate(username: String, password: String) -> AuthResult {
     );
 
     // Prepare TLS client
-    let mut cert_store = RootCertStore::empty();
-    cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    let root_store = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect(),
+    };
 
-    let tls = rustls::ClientConfig::builder()
-        .with_cipher_suites(&[
+    let crypto_provider = CryptoProvider {
+        cipher_suites: vec![
+            TLS13_AES_128_GCM_SHA256,
             TLS13_AES_256_GCM_SHA384,
             TLS13_CHACHA20_POLY1305_SHA256,
-            TLS13_AES_128_GCM_SHA256,
-        ])
-        .with_kx_groups(&ALL_KX_GROUPS)
+        ],
+        kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
+        ..aws_lc_rs::default_provider()
+    };
+
+    let tls = ClientConfig::builder_with_provider(Arc::new(crypto_provider))
         .with_protocol_versions(&[&TLS13])
-        .unwrap()
-        .with_root_certificates(cert_store)
+        .expect("configuration should be valid")
+        .with_root_certificates(root_store)
         .with_no_client_auth();
 
     // Create reqwest client
@@ -108,6 +110,7 @@ pub async fn authenticate(username: String, password: String) -> AuthResult {
     let res = client.put(ENDPOINT).json(&req).send().await.unwrap();
 
     let text = res.text().await.unwrap();
+    println!("{:?}", text);
 
     let res = serde_json::from_str::<LoginResponse>(text.as_str()).unwrap();
 
@@ -212,25 +215,24 @@ pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
     );
 
     // Prepare TLS client
-    let mut cert_store = RootCertStore::empty();
-    cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    let root_store = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect(),
+    };
 
-    let tls = rustls::ClientConfig::builder()
-        .with_cipher_suites(&[
+    let crypto_provider = CryptoProvider {
+        cipher_suites: vec![
+            TLS13_AES_128_GCM_SHA256,
             TLS13_AES_256_GCM_SHA384,
             TLS13_CHACHA20_POLY1305_SHA256,
-            TLS13_AES_128_GCM_SHA256,
-        ])
-        .with_kx_groups(&ALL_KX_GROUPS)
+        ],
+        kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
+        ..aws_lc_rs::default_provider()
+    };
+
+    let tls = ClientConfig::builder_with_provider(Arc::new(crypto_provider))
         .with_protocol_versions(&[&TLS13])
-        .unwrap()
-        .with_root_certificates(cert_store)
+        .expect("configuration should be valid")
+        .with_root_certificates(root_store)
         .with_no_client_auth();
 
     let client = reqwest::ClientBuilder::new()

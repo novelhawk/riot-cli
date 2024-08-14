@@ -1,13 +1,10 @@
-use std::{
-    env,
-};
+use std::env;
 
-use chrono::{Duration};
+use chrono::Duration;
 
-use surrealdb::{Surreal, engine::remote::ws::Ws, opt::auth::Root};
+use crate::val_api::{get_region, get_user_info};
 use val_api::{authenticate, get_entitlements_token};
 use val_user::User;
-use crate::val_api::{get_region, get_user_info};
 
 mod val_api;
 mod val_user;
@@ -23,16 +20,9 @@ async fn main() {
         return;
     }
 
-    // let db = Surreal::new::<Ws>("localhost:8000").await?;
-
-    // // Signin as a namespace, database, or root user
-    // db.signin(Root {
-    //     username: "root",
-    //     password: "root",
-    // }).await?;
-
-    // // Select a specific namespace / database
-    // db.use_ns("namespace").use_db("database").await?;
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .unwrap();
 
     login(args[1].clone(), args[2].clone()).await;
 }
@@ -65,4 +55,3 @@ async fn login(username: String, password: String) {
 
     println!("{user:#?}");
 }
-

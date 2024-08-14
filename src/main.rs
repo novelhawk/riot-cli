@@ -3,10 +3,6 @@ use std::{
 };
 
 use chrono::{Utc, Local, DateTime};
-use surrealdb::{
-    sql::{Value},
-    Datastore, Response, Session,
-};
 use val_api::{silent_login, unofficial};
 use val_user::User;
 
