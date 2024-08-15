@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use val_login_webview::tokens::Tokens;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthClientRequest {
@@ -37,16 +38,9 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Tokens {
-    pub access_token: String,
-    pub id_token: String,
-    pub expires_in: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct AuthResult {
     pub tokens: Tokens,
-    pub time: chrono::DateTime<chrono::Utc>,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
     pub cookies: String,
 }
 
@@ -64,13 +58,13 @@ pub struct UnofficalApiResponse<T> {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ValorantVersionResponse {
-    pub manifest_id: String, //"08FD21AD41B7E3D3",
-    pub branch: String, //"release-05.05",
-    pub version: String, //"05.05.00.759728",
-    pub build_version: String, //"7",
-    pub engine_version: String, //"4.26.2.0",
+    pub manifest_id: String,         //"08FD21AD41B7E3D3",
+    pub branch: String,              //"release-05.05",
+    pub version: String,             //"05.05.00.759728",
+    pub build_version: String,       //"7",
+    pub engine_version: String,      //"4.26.2.0",
     pub riot_client_version: String, //"release-05.05-shipping-7-759728",
-    pub build_date: String, //"2022-09-06T00:00:00Z"
+    pub build_date: String,          //"2022-09-06T00:00:00Z"
 }
 
 #[derive(Serialize, Deserialize, Debug)]

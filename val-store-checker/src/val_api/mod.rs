@@ -24,12 +24,11 @@ use rustls::{
     version::TLS13,
     ClientConfig,
 };
+use val_login_webview::tokens::Tokens;
 
 use crate::val_api::models::{EntitlementsTokenResponse, RegionRequest, RegionResponse};
 
-use self::models::{
-    AuthClientRequest, AuthResult, LoginRequest, LoginResponse, Tokens, UserInfoResponse,
-};
+use self::models::{AuthClientRequest, AuthResult, LoginRequest, LoginResponse, UserInfoResponse};
 
 const USER_AGENT: HeaderValue = HeaderValue::from_static(
     "RiotClient/92.0.0.1904.3969 rso-auth (Windows;10;;Professional, x64)",
