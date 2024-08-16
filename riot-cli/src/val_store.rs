@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
+use directories::ProjectDirs;
 use url::Url;
 use val_api::{
     endpoints::{
@@ -8,7 +9,7 @@ use val_api::{
         auth::silent_login,
         user::{get_entitlements_token, get_region, get_user_info},
     },
-    models::{EmbedFooter, EmbedImage, MessageEmbed, SkinDetails, WebhookMessage},
+    models::{EmbedFooter, EmbedImage, MessageEmbed, SkinData, SkinDetails, WebhookMessage},
     thirdparty::{self, discord::send_webhook},
 };
 use val_login_webview2::{login_popup, RIOT_AUTH_PAGE};
@@ -71,7 +72,10 @@ pub async fn refresh_expired_accounts(db: &Datastore) {
 }
 
 pub async fn add_account(db: &Datastore) {
-    let (tokens, cookies) = login_popup(RIOT_AUTH_PAGE).expect("failed to login");
+    let project = ProjectDirs::from("", "", "riot-cli").expect("project dirs should work");
+    let folder = project.data_dir().join("edge-profile");
+
+    let (tokens, cookies) = login_popup(&folder, RIOT_AUTH_PAGE).expect("failed to login");
     let (raw_user_info, user_info) = get_user_info(&tokens.access_token).await;
     let region = get_region(&tokens.access_token, tokens.id_token.clone()).await;
     let entitlements_token = get_entitlements_token(&tokens.access_token).await;
@@ -150,13 +154,17 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
                 db.set_user_next_nightmarket(&user.id, &next_store)
                     .expect("failed update next_market");
 
-                let skins: Vec<SkinDetails> = bonus
+                let skins: Vec<_> = bonus
                     .bonus_store_offers
                     .iter()
-                    .map(|offer| hash.get(&offer.offer.offer_id).unwrap().clone())
+                    .map(|offer| SkinData {
+                        offer: offer.offer.clone(),
+                        detail: hash.get(&offer.offer.offer_id).unwrap().clone(),
+                    })
                     .collect();
 
-                send_webhooks(&user, &webhooks, skins).await;
+                let message = generate_nightmarket_messages(&user, skins);
+                send_webhooks(&webhooks, message).await;
             }
         }
 
@@ -169,47 +177,91 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
         db.set_user_next_store(&user.id, &next_store)
             .expect("failed update next_store");
 
-        let skins: Vec<SkinDetails> = store
+        let skins: Vec<_> = store
             .skins_panel_layout
-            .single_item_offers
+            .single_item_store_offers
             .iter()
-            .map(|skin| hash.get(skin).unwrap().clone())
+            .map(|offer| SkinData {
+                offer: offer.clone(),
+                detail: hash.get(&offer.offer_id).unwrap().clone(),
+            })
             .collect();
 
-        send_webhooks(&user, &webhooks, skins).await;
+        let message = generate_store_messages(&user, skins);
+        send_webhooks(&webhooks, message).await;
+
+        println!(
+            "Invoked webhooks for user {}#{}",
+            user.game_name, user.tag_line
+        );
     }
 }
 
-pub async fn send_webhooks(user: &User, webhooks: &Vec<String>, skins: Vec<SkinDetails>) {
-    let message = WebhookMessage {
+pub fn generate_store_messages(user: &User, skins: Vec<SkinData>) -> WebhookMessage {
+    WebhookMessage {
         username: Some(format!("{}#{}", user.game_name, user.tag_line)),
         content: None,
         embeds: Some(
             skins
                 .into_iter()
                 .map(|skin| MessageEmbed {
-                    title: skin.display_name,
-                    description: None,
-                    image: skin
+                    title: skin.detail.display_name,
+                    description: Some(format!(
+                        "<:vp:1274118602001350757> {}",
+                        skin.offer.cost.valorant_points
+                    )),
+                    image: None,
+                    thumbnail: skin
+                        .detail
                         .display_icon
                         .map(|url| EmbedImage { url })
-                        .or(skin.levels[0]
+                        .or(skin.detail.levels[0]
+                            .clone()
+                            .display_icon
+                            .map(|url| EmbedImage { url }))
+                        .clone(),
+                    color: Some(0x6cc551),
+                    timestamp: None,
+                    footer: None,
+                })
+                .collect(),
+        ),
+    }
+}
+
+pub fn generate_nightmarket_messages(user: &User, skins: Vec<SkinData>) -> WebhookMessage {
+    WebhookMessage {
+        username: Some(format!("{}#{}", user.game_name, user.tag_line)),
+        content: None,
+        embeds: Some(
+            skins
+                .into_iter()
+                .map(|skin| MessageEmbed {
+                    title: skin.detail.display_name,
+                    description: Some(format!(
+                        "<:vp:1274118602001350757> {}",
+                        skin.offer.cost.valorant_points
+                    )),
+                    image: None,
+                    thumbnail: skin
+                        .detail
+                        .display_icon
+                        .map(|url| EmbedImage { url })
+                        .or(skin.detail.levels[0]
                             .clone()
                             .display_icon
                             .map(|url| EmbedImage { url }))
                         .clone(),
                     color: Some(0xff00aa),
-                    timestamp: Some(chrono::Utc::now()),
-                    footer: Some(EmbedFooter {
-                        text: Some("Automatic Valorant Shop Checker".to_string()),
-                        icon_url: None,
-                        proxy_icon_url: None,
-                    }),
+                    timestamp: None,
+                    footer: None,
                 })
                 .collect(),
         ),
-    };
+    }
+}
 
+pub async fn send_webhooks(webhooks: &Vec<String>, message: WebhookMessage) {
     for webhook in webhooks {
         send_webhook(webhook, &message).await;
     }

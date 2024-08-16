@@ -2,7 +2,9 @@ pub mod tokens;
 
 use std::{
     cell::OnceCell,
-    mem, ptr,
+    mem,
+    path::Path,
+    ptr,
     rc::Rc,
     sync::{Arc, RwLock},
 };
@@ -34,15 +36,7 @@ pub const RIOT_AUTH_PAGE: &str = concat!(
     "nonce=1"
 );
 
-fn expires_to_expiration(is_session: bool, expires: f64) -> Expiration {
-    if is_session || !expires.is_finite() || expires.is_sign_negative() {
-        Expiration::Session
-    } else {
-        Expiration::DateTime(OffsetDateTime::from_unix_timestamp(expires as i64).unwrap())
-    }
-}
-
-pub fn login_popup(login_page: &str) -> Option<(Tokens, String)> {
+pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, String)> {
     let mut event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
@@ -72,6 +66,7 @@ pub fn login_popup(login_page: &str) -> Option<(Tokens, String)> {
     let event_loop_proxy = event_loop.create_proxy();
     let initial_page = login_page.to_string();
     Environment::builder()
+        .with_user_data_folder(&profile_folder)
         .build(move |env| {
             let env = env?;
             let _env = env.create_controller(hwnd, move |c| {

@@ -47,7 +47,6 @@ pub async fn store_fetch_storefront(
         .unwrap();
 
     let json = res.text().await.unwrap();
-    println!("{json}");
 
     serde_json::from_str(&json).unwrap()
 }

@@ -87,9 +87,6 @@ pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
         .await
         .unwrap();
 
-    let status = res.status();
-    println!("Status: {status:?}");
-
     let location = res
         .headers()
         .get(header::LOCATION)

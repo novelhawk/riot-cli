@@ -119,6 +119,12 @@ pub struct RegionResponse {
     pub affinities: Affinities,
 }
 
+#[derive(Debug)]
+pub struct SkinData {
+    pub detail: SkinDetails,
+    pub offer: Offer,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SkinDetails {
@@ -141,6 +147,7 @@ pub struct SkinLevel {
 #[serde(rename_all = "PascalCase")]
 pub struct SkinPanelLayout {
     pub single_item_offers: Vec<String>,
+    pub single_item_store_offers: Vec<Offer>,
     pub single_item_offers_remaining_duration_in_seconds: i64,
 }
 
@@ -170,7 +177,7 @@ pub struct BonusStoreOffer {
     pub is_seen: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct Offer {
     #[serde(rename = "OfferID")]
@@ -180,7 +187,7 @@ pub struct Offer {
     pub cost: PriceDetail,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PriceDetail {
     #[serde(rename = "85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741")]
     pub valorant_points: u64,
@@ -212,6 +219,8 @@ pub struct MessageEmbed {
     pub timestamp: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<EmbedImage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thumbnail: Option<EmbedImage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub footer: Option<EmbedFooter>,
 }
