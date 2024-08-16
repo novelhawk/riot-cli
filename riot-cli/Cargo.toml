@@ -8,6 +8,8 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 directories = "5.0.1"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
-val-login-webview = { path = "../val-login-webview" }
+val-login-webview2 = { path = "../val-login-webview2" }
 val-api = { path = "../val-api" }
 tokio = { version = "1.39.2", features = ["full"] }
+cookie_store = "0.21.0"
+url = "2.5.2"

@@ -8,7 +8,9 @@ pub struct User {
     pub tag_line: String,
     pub region: String,
     pub user_info: String,
-    pub authorized_cookies: String,
+    pub entitlements_token: String,
+    pub next_store: DateTime<Utc>,
+    pub next_nightmarket: DateTime<Utc>,
     pub session: Option<UserSession>,
 }
 
@@ -19,4 +21,5 @@ pub struct UserSession {
     pub access_token: String,
     pub id_token: String,
     pub expires_at: DateTime<Utc>,
+    pub authorized_cookies: String,
 }

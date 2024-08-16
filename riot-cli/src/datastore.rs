@@ -1,8 +1,6 @@
-use std::{
-    fs, i64,
-    path::{Path, PathBuf},
-};
+use std::{fs, i64, path::PathBuf};
 
+use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
 use rusqlite::{params, Connection, Result};
 
@@ -30,30 +28,44 @@ impl Datastore {
 
     pub fn set_session(&self, user_id: i64, session: &UserSession) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO sessions (user_id, token, id_token, expires_at)
-            VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO sessions (user_id, access_token, id_token, expires_at, authenticated_cookies)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             ON CONFLICT (user_id)
             DO
                 UPDATE
-                SET token = ?2, id_token = ?3, expires_at = ?4",
+                SET access_token = ?2, id_token = ?3, expires_at = ?4, authenticated_cookies = ?5",
             params![
                 user_id,
                 &session.access_token,
                 &session.id_token,
                 session.expires_at.timestamp_nanos_opt().unwrap_or(i64::MAX),
+                &session.authorized_cookies,
             ],
         )?;
         Ok(())
     }
 
     pub fn add_user(&self, user: &User) -> Result<i64> {
-        self.conn.execute(
-            "INSERT INTO users (puuid, game_name, tag_line, region, user_info, authenticated_cookies)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            [&user.puuid, &user.game_name, &user.tag_line, &user.region, &user.user_info, &user.authorized_cookies]
+        let user_id = self.conn.query_row(
+            "INSERT INTO users (puuid, game_name, tag_line, region, user_info, entitlements_token, next_store, next_nightmarket)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT (puuid)
+            DO
+                UPDATE
+                SET game_name = ?2, tag_line = ?3, region = ?4, user_info = ?5, entitlements_token = ?6, next_store = ?7, next_nightmarket = ?8
+            RETURNING id",
+            params![
+                &user.puuid,
+                &user.game_name,
+                &user.tag_line,
+                &user.region,
+                &user.user_info,
+                &user.entitlements_token,
+                &user.next_store.timestamp_nanos_opt().unwrap_or(i64::MAX),
+                &user.next_nightmarket.timestamp_nanos_opt().unwrap_or(i64::MAX),
+            ],
+            |row| row.get(0),
         )?;
-
-        let user_id = self.conn.last_insert_rowid();
 
         if let Some(session) = &user.session {
             self.set_session(user_id, session)?;
@@ -62,16 +74,105 @@ impl Datastore {
         Ok(user_id)
     }
 
+    pub fn set_user_next_store(&self, user_id: &i64, next_store: &DateTime<Utc>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE users
+            SET next_store = ?2
+            WHERE id = ?1",
+            params![
+                &user_id,
+                &next_store.timestamp_nanos_opt().unwrap_or(i64::MAX),
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn set_user_next_nightmarket(
+        &self,
+        user_id: &i64,
+        next_nightmarket: &DateTime<Utc>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE users
+            SET next_nightmarket = ?2
+            WHERE id = ?1",
+            params![
+                &user_id,
+                &next_nightmarket.timestamp_nanos_opt().unwrap_or(i64::MAX),
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn add_webhook(&self, url: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO discord_webhooks (url)
+            VALUES (?1)",
+            [&url],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn get_webhooks(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT url
+            FROM discord_webhooks",
+        )?;
+
+        let urls = stmt.query_map([], |row| row.get(0))?;
+
+        urls.collect()
+    }
+
+    pub fn get_users(&self) -> Result<Vec<User>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT u.id, u.puuid, u.game_name, u.tag_line, u.region, u.user_info, u.entitlements_token, u.next_store, u.next_nightmarket, s.id as session_id, s.access_token, s.id_token, s.expires_at, s.authenticated_cookies
+            FROM users u
+            LEFT JOIN sessions s ON s.user_id = u.id")?;
+
+        let users = stmt.query_map([], |row| {
+            Ok(User {
+                id: row.get(0)?,
+                puuid: row.get(1)?,
+                game_name: row.get(2)?,
+                tag_line: row.get(3)?,
+                region: row.get(4)?,
+                user_info: row.get(5)?,
+                entitlements_token: row.get(6)?,
+                next_store: DateTime::from_timestamp_nanos(row.get(7)?),
+                next_nightmarket: DateTime::from_timestamp_nanos(row.get(8)?),
+                session: match row.get(9)? {
+                    Some(id) => Some(UserSession {
+                        id,
+                        user_id: row.get(0)?,
+                        access_token: row.get(10)?,
+                        id_token: row.get(11)?,
+                        expires_at: DateTime::from_timestamp_nanos(row.get(12)?),
+                        authorized_cookies: row.get(13)?,
+                    }),
+                    None => None,
+                },
+            })
+        })?;
+
+        users.collect()
+    }
+
     fn create_tables(&self) -> Result<()> {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
-                puuid TEXT NOT NULL,
+                puuid TEXT UNIQUE NOT NULL,
                 game_name TEXT NOT NULL,
                 tag_line TEXT NOT NULL,
                 region TEXT NOT NULL,
                 user_info TEXT NOT NULL,
-                authenticated_cookies TEXT NOT NULL
+                entitlements_token TEXT NOT NULL,
+                next_store INTEGER NOT NULL,
+                next_nightmarket INTEGER NOT NULL
             )",
             (),
         )?;
@@ -80,9 +181,10 @@ impl Datastore {
             "CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY,
                 user_id INTEGER UNIQUE NOT NULL,
-                token TEXT NOT NULL,
+                access_token TEXT NOT NULL,
                 id_token TEXT NOT NULL,
                 expires_at INTEGER NOT NULL,
+                authenticated_cookies TEXT NOT NULL,
 
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )",
@@ -90,7 +192,7 @@ impl Datastore {
         )?;
 
         self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS webhooks (
+            "CREATE TABLE IF NOT EXISTS discord_webhooks (
                 id INTEGER PRIMARY KEY,
                 url TEXT NOT NULL
             )",

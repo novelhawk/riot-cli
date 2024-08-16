@@ -155,6 +155,8 @@ pub struct StoreFrontResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct BonusStore {
     pub bonus_store_offers: Vec<BonusStoreOffer>,
+    pub bonus_store_remaining_duration_in_seconds: i64,
+    pub bonus_store_seconds_since_it_started: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -164,6 +166,7 @@ pub struct BonusStoreOffer {
     pub bonus_offer_id: String,
     pub offer: Offer,
     pub discount_percent: i64,
+    pub discount_costs: PriceDetail,
     pub is_seen: bool,
 }
 

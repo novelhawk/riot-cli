@@ -23,7 +23,15 @@ enum Module {
 #[derive(Subcommand, Debug)]
 enum ValStoreCommands {
     Add,
-    Check,
+    Check {
+        #[clap(long, short)]
+        force: bool,
+        #[clap(long)]
+        force_nightmarket: bool,
+    },
+    Webhook {
+        uri: String,
+    },
 }
 
 #[tokio::main]

@@ -32,9 +32,11 @@ const CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/json");
 const ACCEPT: HeaderValue = HeaderValue::from_static("application/json, text/plain, */*");
 
 pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
-    let json = BufReader::new(cookies.as_bytes());
-    let cookie_store = reqwest_cookie_store::CookieStore::load_json(json).unwrap();
-    let cookie_store = reqwest_cookie_store::CookieStoreMutex::new(cookie_store);
+    // let json = BufReader::new(cookies.as_bytes());
+
+    // let cookie_store = reqwest_cookie_store::CookieStore::load_json(json).unwrap();
+    // let cookie_store = reqwest_cookie_store::CookieStoreMutex::new(cookie_store);
+    let cookie_store = reqwest_cookie_store::CookieStoreMutex::default();
     let cookie_store = std::sync::Arc::new(cookie_store);
 
     const ENDPOINT: &str = concat!(
@@ -78,7 +80,12 @@ pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
         .build()
         .unwrap();
 
-    let res = client.get(ENDPOINT).send().await.unwrap();
+    let res = client
+        .get(ENDPOINT)
+        .header(header::COOKIE, cookies)
+        .send()
+        .await
+        .unwrap();
 
     let status = res.status();
     println!("Status: {status:?}");
@@ -90,16 +97,24 @@ pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
 
     let tokens: Tokens = location
         .and_then(|str| url::Url::parse(str).ok())
-        .filter(|url| url.path().starts_with("/login"))
-        .and_then(|url| url.fragment().map(|str| str.to_string()))
-        .and_then(|frag| serde_urlencoded::from_str(&frag).ok())?;
+        .and_then(|url| {
+            url.fragment()
+                .and_then(|frag| serde_urlencoded::from_str(frag).ok())
+        })?;
 
-    let mut writer = BufWriter::new(Vec::new());
-    {
+    let new_cookies = {
         let store = cookie_store.lock().unwrap();
-        store.save_json(&mut writer).unwrap();
-    }
-    let cookies = String::from_utf8_lossy(writer.buffer());
+        let cookies =
+            store.get_request_values(&"https://auth.riotgames.com/authorize".parse().unwrap());
+        cookies
+            .map(|it| format!("{}={}", it.0, it.1))
+            .collect::<Vec<_>>()
+            .join("; ")
 
-    Some((tokens, cookies.to_string()))
+        // store.save_json(&mut writer).unwrap();
+    };
+    // let mut writer = BufWriter::new(Vec::new());
+    // let cookies = String::from_utf8_lossy(writer.buffer());
+
+    Some((tokens, new_cookies))
 }

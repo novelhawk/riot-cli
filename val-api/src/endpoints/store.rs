@@ -26,11 +26,11 @@ pub async fn store_fetch_offers(
 }
 
 pub async fn store_fetch_storefront(
-    client_ver: String,
-    ent: String,
-    access_token: String,
-    shard: String,
-    puuid: String,
+    client_ver: &str,
+    ent: &str,
+    access_token: &str,
+    shard: &str,
+    puuid: &str,
 ) -> StoreFrontResponse {
     let url = format!("https://pd.{shard}.a.pvp.net/store/v2/storefront/{puuid}");
 
@@ -46,5 +46,8 @@ pub async fn store_fetch_storefront(
         .await
         .unwrap();
 
-    res.json::<StoreFrontResponse>().await.unwrap()
+    let json = res.text().await.unwrap();
+    println!("{json}");
+
+    serde_json::from_str(&json).unwrap()
 }
