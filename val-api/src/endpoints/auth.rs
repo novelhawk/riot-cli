@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use reqwest::{
-    header::{self, HeaderValue},
+    header::{self},
     redirect::Policy,
 };
 use rustls::{
@@ -21,19 +21,7 @@ use rustls_native_certs::load_native_certs;
 
 use crate::models::Tokens;
 
-const USER_AGENT: HeaderValue = HeaderValue::from_static(
-    "RiotClient/92.0.0.1904.3969 rso-auth (Windows;10;;Professional, x64)",
-);
-
-const CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/json");
-
-const ACCEPT: HeaderValue = HeaderValue::from_static("application/json, text/plain, */*");
-
 pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
-    // let json = BufReader::new(cookies.as_bytes());
-
-    // let cookie_store = reqwest_cookie_store::CookieStore::load_json(json).unwrap();
-    // let cookie_store = reqwest_cookie_store::CookieStoreMutex::new(cookie_store);
     let cookie_store = reqwest_cookie_store::CookieStoreMutex::default();
     let cookie_store = std::sync::Arc::new(cookie_store);
 
@@ -105,11 +93,7 @@ pub async fn silent_login(cookies: &String) -> Option<(Tokens, String)> {
             .map(|it| format!("{}={}", it.0, it.1))
             .collect::<Vec<_>>()
             .join("; ")
-
-        // store.save_json(&mut writer).unwrap();
     };
-    // let mut writer = BufWriter::new(Vec::new());
-    // let cookies = String::from_utf8_lossy(writer.buffer());
 
     Some((tokens, new_cookies))
 }

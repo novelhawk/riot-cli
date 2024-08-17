@@ -2,21 +2,20 @@ use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
 use directories::ProjectDirs;
-use url::Url;
 use val_api::{
     endpoints::{
         self,
         auth::silent_login,
         user::{get_entitlements_token, get_region, get_user_info},
     },
-    models::{EmbedFooter, EmbedImage, MessageEmbed, SkinData, SkinDetails, WebhookMessage},
+    models::{EmbedImage, MessageEmbed, SkinData, SkinDetails, WebhookMessage},
     thirdparty::{self, discord::send_webhook},
 };
 use val_login_webview2::{login_popup, RIOT_AUTH_PAGE};
 
 use crate::{
     datastore::Datastore,
-    models::{User, UserSession},
+    models::{AddUser, AddUserSession, User},
     ValStoreCommands,
 };
 
@@ -45,17 +44,13 @@ pub async fn refresh_expired_accounts(db: &Datastore) {
         if let Some(session) = user.session {
             if session.expires_at < Utc::now() {
                 if let Some((tokens, cookies)) = silent_login(&session.authorized_cookies).await {
-                    db.set_session(
-                        user.id,
-                        &UserSession {
-                            id: 0,
-                            user_id: 0,
-                            access_token: tokens.access_token,
-                            id_token: tokens.id_token,
-                            expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
-                            authorized_cookies: cookies,
-                        },
-                    )
+                    db.set_session(&AddUserSession {
+                        user_id: user.id,
+                        access_token: tokens.access_token,
+                        id_token: tokens.id_token,
+                        expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
+                        authorized_cookies: cookies,
+                    })
                     .unwrap();
                 } else {
                     println!("Login for {}#{}", user.game_name, user.tag_line);
@@ -80,17 +75,7 @@ pub async fn add_account(db: &Datastore) {
     let region = get_region(&tokens.access_token, tokens.id_token.clone()).await;
     let entitlements_token = get_entitlements_token(&tokens.access_token).await;
 
-    let session = UserSession {
-        id: 0,
-        user_id: 0,
-        access_token: tokens.access_token.clone(),
-        id_token: tokens.id_token.clone(),
-        expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
-        authorized_cookies: cookies,
-    };
-
-    let user = User {
-        id: 0,
+    let user = AddUser {
         puuid: user_info.sub.clone(),
         game_name: user_info.acct.game_name.clone(),
         tag_line: user_info.acct.tag_line.clone(),
@@ -99,10 +84,19 @@ pub async fn add_account(db: &Datastore) {
         entitlements_token,
         next_nightmarket: Utc::now(),
         next_store: Utc::now(),
-        session: Some(session),
     };
 
-    db.add_user(&user).expect("user should be added");
+    let user_id = db.add_user(&user).expect("user should be added");
+
+    let session = AddUserSession {
+        user_id,
+        access_token: tokens.access_token.clone(),
+        id_token: tokens.id_token.clone(),
+        expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
+        authorized_cookies: cookies,
+    };
+
+    db.set_session(&session).expect("session should be saved");
 
     println!(
         "Added account {}#{} to database",

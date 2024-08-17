@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
 use rusqlite::{params, Connection, Result};
 
-use crate::models::{User, UserSession};
+use crate::models::{AddUser, AddUserSession, User, UserSession};
 
 pub struct Datastore {
     conn: Connection,
@@ -26,7 +26,7 @@ impl Datastore {
         return data_dir.join("datastore.db");
     }
 
-    pub fn set_session(&self, user_id: i64, session: &UserSession) -> Result<()> {
+    pub fn set_session(&self, session: &AddUserSession) -> Result<()> {
         self.conn.execute(
             "INSERT INTO sessions (user_id, access_token, id_token, expires_at, authenticated_cookies)
             VALUES (?1, ?2, ?3, ?4, ?5)
@@ -35,18 +35,17 @@ impl Datastore {
                 UPDATE
                 SET access_token = ?2, id_token = ?3, expires_at = ?4, authenticated_cookies = ?5",
             params![
-                user_id,
+                &session.user_id,
                 &session.access_token,
                 &session.id_token,
                 session.expires_at.timestamp_nanos_opt().unwrap_or(i64::MAX),
                 &session.authorized_cookies,
             ],
-        )?;
-        Ok(())
+        ).map(|_| ())
     }
 
-    pub fn add_user(&self, user: &User) -> Result<i64> {
-        let user_id = self.conn.query_row(
+    pub fn add_user(&self, user: &AddUser) -> Result<i64> {
+        self.conn.query_row(
             "INSERT INTO users (puuid, game_name, tag_line, region, user_info, entitlements_token, next_store, next_nightmarket)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ON CONFLICT (puuid)
@@ -65,13 +64,7 @@ impl Datastore {
                 &user.next_nightmarket.timestamp_nanos_opt().unwrap_or(i64::MAX),
             ],
             |row| row.get(0),
-        )?;
-
-        if let Some(session) = &user.session {
-            self.set_session(user_id, session)?;
-        }
-
-        Ok(user_id)
+        )
     }
 
     pub fn set_user_next_store(&self, user_id: &i64, next_store: &DateTime<Utc>) -> Result<()> {
