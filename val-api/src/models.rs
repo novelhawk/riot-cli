@@ -129,6 +129,7 @@ pub struct RegionResponse {
 pub struct SkinData {
     pub detail: SkinDetails,
     pub offer: Offer,
+    pub bonus_offer: Option<BonusStoreOffer>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -172,7 +173,7 @@ pub struct BonusStore {
     pub bonus_store_seconds_since_it_started: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct BonusStoreOffer {
     #[serde(rename = "BonusOfferID")]

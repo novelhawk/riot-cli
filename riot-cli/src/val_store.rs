@@ -160,13 +160,14 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
                 let skins: Vec<_> = bonus
                     .bonus_store_offers
                     .iter()
-                    .map(|offer| SkinData {
-                        offer: offer.offer.clone(),
-                        detail: hash.get(&offer.offer.offer_id).unwrap().clone(),
+                    .map(|bonus_offer| SkinData {
+                        offer: bonus_offer.offer.clone(),
+                        detail: hash.get(&bonus_offer.offer.offer_id).unwrap().clone(),
+                        bonus_offer: Some(bonus_offer.clone()),
                     })
                     .collect();
 
-                let message = generate_nightmarket_messages(&user, skins);
+                let message = generate_store_messages(&user, skins);
                 send_webhooks(&webhooks, message).await;
             }
         }
@@ -187,6 +188,7 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
             .map(|offer| SkinData {
                 offer: offer.clone(),
                 detail: hash.get(&offer.offer_id).unwrap().clone(),
+                bonus_offer: None,
             })
             .collect();
 
@@ -209,10 +211,18 @@ pub fn generate_store_messages(user: &User, skins: Vec<SkinData>) -> WebhookMess
                 .into_iter()
                 .map(|skin| MessageEmbed {
                     title: skin.detail.display_name,
-                    description: Some(format!(
-                        "<:vp:1274118602001350757> {}",
-                        skin.offer.cost.valorant_points
-                    )),
+                    description: match &skin.bonus_offer {
+                        Some(bonus_offer) => Some(format!(
+                            "<:vp:1274118602001350757> ~~{}~~ {} (-{}%)",
+                            skin.offer.cost.valorant_points,
+                            bonus_offer.discount_costs.valorant_points,
+                            bonus_offer.discount_percent,
+                        )),
+                        None => Some(format!(
+                            "<:vp:1274118602001350757> {}",
+                            skin.offer.cost.valorant_points,
+                        )),
+                    },
                     image: None,
                     thumbnail: skin
                         .detail
@@ -223,39 +233,11 @@ pub fn generate_store_messages(user: &User, skins: Vec<SkinData>) -> WebhookMess
                             .display_icon
                             .map(|url| EmbedImage { url }))
                         .clone(),
-                    color: Some(0x6cc551),
-                    timestamp: None,
-                    footer: None,
-                })
-                .collect(),
-        ),
-    }
-}
-
-pub fn generate_nightmarket_messages(user: &User, skins: Vec<SkinData>) -> WebhookMessage {
-    WebhookMessage {
-        username: Some(format!("{}#{}", user.game_name, user.tag_line)),
-        content: None,
-        embeds: Some(
-            skins
-                .into_iter()
-                .map(|skin| MessageEmbed {
-                    title: skin.detail.display_name,
-                    description: Some(format!(
-                        "<:vp:1274118602001350757> {}",
-                        skin.offer.cost.valorant_points
-                    )),
-                    image: None,
-                    thumbnail: skin
-                        .detail
-                        .display_icon
-                        .map(|url| EmbedImage { url })
-                        .or(skin.detail.levels[0]
-                            .clone()
-                            .display_icon
-                            .map(|url| EmbedImage { url }))
-                        .clone(),
-                    color: Some(0xff00aa),
+                    color: Some(if skin.bonus_offer.as_ref().is_none() {
+                        0x6cc551
+                    } else {
+                        0xff00aa
+                    }),
                     timestamp: None,
                     footer: None,
                 })
