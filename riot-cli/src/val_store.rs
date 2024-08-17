@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Not};
 
 use chrono::{Duration, Utc};
 use directories::ProjectDirs;
@@ -40,29 +40,38 @@ pub async fn webhook(db: &Datastore, uri: &String) {
 pub async fn refresh_expired_accounts(db: &Datastore) {
     let users = db.get_users().expect("users");
 
-    for user in users {
-        if let Some(session) = user.session {
-            if session.expires_at < Utc::now() {
-                if let Some((tokens, cookies)) = silent_login(&session.authorized_cookies).await {
-                    db.set_session(&AddUserSession {
-                        user_id: user.id,
-                        access_token: tokens.access_token,
-                        id_token: tokens.id_token,
-                        expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
-                        authorized_cookies: cookies,
-                    })
-                    .unwrap();
-                } else {
-                    println!("Login for {}#{}", user.game_name, user.tag_line);
-                    add_account(&db).await;
-                }
-            } else {
-                // ok
-            }
-        } else {
-            println!("Login for {}#{}", user.game_name, user.tag_line);
-            add_account(&db).await;
-        }
+    let (not_logged, expired): (Vec<_>, Vec<_>) = users
+        .into_iter()
+        .filter(|user| {
+            user.session
+                .as_ref()
+                .is_some_and(|s| s.expires_at >= Utc::now())
+                .not()
+        })
+        .partition(|user| user.session.as_ref().is_none());
+
+    let mut failed_refresh = Vec::new();
+
+    for user in expired {
+        let cookies = user.session.as_ref().unwrap().authorized_cookies.clone();
+        let Some((tokens, cookies)) = silent_login(&cookies).await else {
+            failed_refresh.push(user);
+            continue;
+        };
+
+        db.set_session(&AddUserSession {
+            user_id: user.id,
+            access_token: tokens.access_token,
+            id_token: tokens.id_token,
+            expires_at: Utc::now() + Duration::seconds(tokens.expires_in as i64),
+            authorized_cookies: cookies,
+        })
+        .expect("session should be updated")
+    }
+
+    for user in not_logged.into_iter().chain(failed_refresh) {
+        println!("Login for {}#{}", user.game_name, user.tag_line);
+        add_account(&db).await;
     }
 }
 
