@@ -1,4 +1,4 @@
 [workspace]
-members = [ "riot-cli", "val-api", "val-login-webview2", "val-login-webview", "val-store-checker" ]
+members = [ "riot-cli", "val-api", "val-login-webview2" ]
 resolver = "2"
 
