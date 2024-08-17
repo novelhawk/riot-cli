@@ -14,7 +14,7 @@ impl Datastore {
     pub fn initialize() -> Result<Self> {
         let conn = Connection::open(Datastore::get_database_path())?;
         let store = Self { conn };
-        store.create_tables()?;
+        store.migrate()?;
 
         Ok(store)
     }
@@ -154,55 +154,29 @@ impl Datastore {
         users.collect()
     }
 
-    fn create_tables(&self) -> Result<()> {
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                puuid TEXT UNIQUE NOT NULL,
-                game_name TEXT NOT NULL,
-                tag_line TEXT NOT NULL,
-                region TEXT NOT NULL,
-                user_info TEXT NOT NULL,
-                entitlements_token TEXT NOT NULL,
-                next_store INTEGER NOT NULL,
-                next_nightmarket INTEGER NOT NULL
-            )",
-            (),
+    fn get_database_version(&self) -> Result<usize> {
+        let version: String = self.conn.query_row(
+            "SELECT version
+            FROM version",
+            [],
+            |row| row.get(0),
         )?;
 
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY,
-                user_id INTEGER UNIQUE NOT NULL,
-                access_token TEXT NOT NULL,
-                id_token TEXT NOT NULL,
-                expires_at INTEGER NOT NULL,
-                authenticated_cookies TEXT NOT NULL,
+        Ok(if version == "1.0.0" {
+            1
+        } else if let Ok(version) = version.parse() {
+            version
+        } else {
+            0
+        })
+    }
 
-                FOREIGN KEY (user_id) REFERENCES users (id)
-            )",
-            (),
-        )?;
-
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS discord_webhooks (
-                id INTEGER PRIMARY KEY,
-                url TEXT NOT NULL
-            )",
-            (),
-        )?;
-
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS version (
-                version TEXT NOT NULL
-            )",
-            (),
-        )?;
-
-        self.conn.execute_batch(
-            "DELETE FROM version;
-            INSERT INTO version VALUES ('1.0.0');",
-        )?;
+    fn migrate(&self) -> Result<()> {
+        let version = self.get_database_version()?;
+        if version < 1 {
+            self.conn
+                .execute_batch(include_str!("../migrations/01_initialize.sql"))?;
+        }
 
         Ok(())
     }
