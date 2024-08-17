@@ -1,15 +1,7 @@
 pub mod tokens;
 
-use std::{
-    cell::OnceCell,
-    mem,
-    path::Path,
-    ptr,
-    rc::Rc,
-    sync::{Arc, RwLock},
-};
+use std::{cell::OnceCell, path::Path, rc::Rc};
 
-use cookie::{time::OffsetDateTime, Cookie, Expiration};
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -19,13 +11,11 @@ use tao::{
     window::WindowBuilder,
 };
 use tokens::Tokens;
-use webview2::{check_hresult, Controller, Environment};
-use webview2_sys::{ICoreWebView2CookieManagerVTable, ICoreWebView2_2};
-use winapi::{
-    shared::{windef::HWND, winerror::E_FAIL},
-    um::winuser::GetClientRect,
+use webview2::{Controller, Environment};
+use winapi::shared::{
+    windef::{HWND, RECT},
+    winerror::E_FAIL,
 };
-use wry::{WebViewBuilder, WebViewBuilderExtWindows};
 
 pub const RIOT_AUTH_PAGE: &str = concat!(
     "https://auth.riotgames.com/authorize?",
@@ -54,6 +44,8 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
 
     let hwnd = handle.hwnd.get() as HWND;
 
+    let inner_size = window.inner_size();
+
     let controller: Rc<OnceCell<Controller>> = Rc::new(OnceCell::new());
     let controller_clone = controller.clone();
 
@@ -66,6 +58,7 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
     let event_loop_proxy = event_loop.create_proxy();
     let initial_page = login_page.to_string();
     Environment::builder()
+        .with_additional_browser_arguments("--incognito")
         .with_user_data_folder(&profile_folder)
         .build(move |env| {
             let env = env?;
@@ -73,16 +66,13 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
                 let c = c?;
 
                 let webview = c.get_webview()?;
-                webview
-                    .get_webview2()?
-                    .get_cookie_manager()?
-                    .delete_all_cookies()?;
 
-                unsafe {
-                    let mut rect = mem::zeroed();
-                    GetClientRect(hwnd, &mut rect);
-                    c.put_bounds(rect)?;
-                }
+                c.put_bounds(RECT {
+                    left: 0,
+                    top: 0,
+                    right: inner_size.width as i32,
+                    bottom: inner_size.height as i32,
+                })?;
 
                 webview.add_navigation_starting(move |webview, event| {
                     let uri = event.get_uri()?;
@@ -147,13 +137,37 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
         })
         .expect("failed to create environment");
 
-    let exit_code = event_loop.run_return(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => *control_flow = ControlFlow::ExitWithCode(1),
-        Event::UserEvent(_) => *control_flow = ControlFlow::Exit,
-        _ => *control_flow = ControlFlow::Wait,
+    let exit_code = event_loop.run_return(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                if let Some(controller) = controller.get() {
+                    let _ = controller.put_bounds(RECT {
+                        left: 0,
+                        top: 0,
+                        right: size.width as i32,
+                        bottom: size.height as i32,
+                    });
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Moved(_),
+                ..
+            } => {
+                if let Some(controller) = controller.get() {
+                    let _ = controller.notify_parent_window_position_changed();
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => *control_flow = ControlFlow::ExitWithCode(1),
+            Event::UserEvent(_) => *control_flow = ControlFlow::Exit,
+            _ => {}
+        }
     });
 
     println!("Window exited with exit code {exit_code}");

@@ -3423,7 +3423,6 @@ dependencies = [
 name = "val-login-webview2"
 version = "0.1.0"
 dependencies = [
- "cookie",
  "serde",
  "serde_urlencoded",
  "tao",
@@ -3432,7 +3431,6 @@ dependencies = [
  "webview2",
  "webview2-sys 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi",
- "wry",
 ]
 
 [[package]]
