@@ -23,7 +23,7 @@ pub async fn handle_val_store_command(command: &ValStoreCommands) {
     let datastore = Datastore::initialize().expect("database should initialize");
 
     match command {
-        ValStoreCommands::Add => add_account(&datastore).await,
+        ValStoreCommands::Add => drop(add_account(&datastore).await),
         ValStoreCommands::Check {
             force,
             force_nightmarket,
@@ -71,11 +71,14 @@ pub async fn refresh_expired_accounts(db: &Datastore) {
 
     for user in not_logged.into_iter().chain(failed_refresh) {
         println!("Login for {}#{}", user.game_name, user.tag_line);
-        add_account(&db).await;
+        let user_id = add_account(&db).await;
+        if user_id != user.id {
+            eprintln!("Logged in on the wrong account!");
+        }
     }
 }
 
-pub async fn add_account(db: &Datastore) {
+pub async fn add_account(db: &Datastore) -> i64 {
     let project = ProjectDirs::from("", "", "riot-cli").expect("project dirs should work");
     let folder = project.data_dir().join("edge-profile");
 
@@ -111,6 +114,8 @@ pub async fn add_account(db: &Datastore) {
         "Added account {}#{} to database",
         user.game_name, user.tag_line
     );
+
+    user_id
 }
 
 pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
