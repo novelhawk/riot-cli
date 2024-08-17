@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use val_login_webview::tokens::Tokens;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthClientRequest {
@@ -35,6 +34,13 @@ pub struct LoginResponse {
     #[serde(rename = "type")]
     pub response_type: String,
     pub response: LoginResponseData,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Tokens {
+    pub access_token: String,
+    pub id_token: String,
+    pub expires_in: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

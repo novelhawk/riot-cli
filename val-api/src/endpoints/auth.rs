@@ -1,7 +1,4 @@
-use std::{
-    io::{BufReader, BufWriter},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use reqwest::{
     header::{self, HeaderValue},
@@ -21,7 +18,8 @@ use rustls::{
     ClientConfig,
 };
 use rustls_native_certs::load_native_certs;
-use val_login_webview::tokens::Tokens;
+
+use crate::models::Tokens;
 
 const USER_AGENT: HeaderValue = HeaderValue::from_static(
     "RiotClient/92.0.0.1904.3969 rso-auth (Windows;10;;Professional, x64)",

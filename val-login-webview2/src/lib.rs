@@ -1,5 +1,3 @@
-pub mod tokens;
-
 use std::{cell::OnceCell, path::Path, rc::Rc};
 
 use tao::{
@@ -10,7 +8,7 @@ use tao::{
     rwh_06::{HasWindowHandle, RawWindowHandle},
     window::WindowBuilder,
 };
-use tokens::Tokens;
+use val_api::models::Tokens;
 use webview2::{Controller, Environment};
 use winapi::shared::{
     windef::{HWND, RECT},
