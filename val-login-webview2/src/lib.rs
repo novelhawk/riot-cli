@@ -1,4 +1,8 @@
-use std::{cell::OnceCell, path::Path, rc::Rc};
+use std::{
+    cell::{Cell, OnceCell},
+    path::Path,
+    rc::Rc,
+};
 
 use tao::{
     dpi::LogicalSize,
@@ -47,10 +51,10 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
     let controller: Rc<OnceCell<Controller>> = Rc::new(OnceCell::new());
     let controller_clone = controller.clone();
 
-    let uri: Rc<OnceCell<String>> = Rc::new(OnceCell::new());
+    let uri: Rc<Cell<Option<String>>> = Rc::new(Cell::new(None));
     let uri_clone = uri.clone();
 
-    let cookie_cell: Rc<OnceCell<String>> = Rc::new(OnceCell::new());
+    let cookie_cell: Rc<Cell<Option<String>>> = Rc::new(Cell::new(None));
     let cookie_cell_2 = cookie_cell.clone();
 
     let event_loop_proxy = event_loop.create_proxy();
@@ -77,7 +81,7 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
 
                     if uri.contains("access_token") {
                         event.put_cancel(true)?;
-                        uri_clone.set(uri).expect("set uri failed");
+                        uri_clone.set(Some(uri));
 
                         let webview2 = webview.get_webview2()?;
                         let cookie_manager = webview2.get_cookie_manager()?;
@@ -109,9 +113,7 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
                                         .join("; ")
                                         .to_string();
 
-                                    cookie_cell_3
-                                        .set(cookie_str)
-                                        .expect("cookies should be set");
+                                    cookie_cell_3.set(Some(cookie_str));
 
                                     event_loop_proxy_2
                                         .send_event(())
@@ -170,17 +172,13 @@ pub fn login_popup(profile_folder: &Path, login_page: &str) -> Option<(Tokens, S
 
     println!("Window exited with exit code {exit_code}");
 
-    let tokens = uri.get().expect("uri should have been set");
-    let cookies = cookie_cell
-        .get()
-        .expect("cookies should have been set")
-        .clone();
+    let tokens = uri
+        .take()
+        .and_then(|uri| url::Url::parse(&uri).ok())
+        .and_then(|uri| uri.fragment().map(|str| str.to_string()))
+        .and_then(|frag| serde_urlencoded::from_str(&frag).ok());
 
-    let tokens = url::Url::parse(&tokens)
-        .ok()
-        .and_then(|u| u.fragment().map(|str| str.to_string()))
-        .map(|str| serde_urlencoded::from_str(&str).expect("fragment should contain tokens"))
-        .unwrap();
+    let cookies = cookie_cell.take();
 
-    Some((tokens, cookies))
+    tokens.and_then(|t| cookies.map(|c| (t, c)))
 }
