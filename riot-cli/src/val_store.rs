@@ -138,7 +138,7 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
             continue;
         };
 
-        if user.next_store > Utc::now() && !force {
+        if user.next_store > Utc::now() && !force && !force_nightmarket {
             println!(
                 "Skipping user {}#{}, next shop at {}",
                 user.game_name, user.tag_line, user.next_store
@@ -174,36 +174,39 @@ pub async fn check(db: &Datastore, force: &bool, force_nightmarket: &bool) {
 
                 let message = generate_store_messages(&user, skins);
                 send_webhooks(&webhooks, message).await;
+
+                println!("Sent nightmarket of {}#{}", user.game_name, user.tag_line);
             }
+        } else if *force_nightmarket {
+            println!("No nightmarket available");
         }
 
-        let duration = Duration::seconds(
-            store
+        if user.next_store <= Utc::now() || *force {
+            let duration = Duration::seconds(
+                store
+                    .skins_panel_layout
+                    .single_item_offers_remaining_duration_in_seconds,
+            );
+            let next_store = Utc::now() + duration;
+            db.set_user_next_store(&user.id, &next_store)
+                .expect("failed update next_store");
+
+            let skins: Vec<_> = store
                 .skins_panel_layout
-                .single_item_offers_remaining_duration_in_seconds,
-        );
-        let next_store = Utc::now() + duration;
-        db.set_user_next_store(&user.id, &next_store)
-            .expect("failed update next_store");
+                .single_item_store_offers
+                .iter()
+                .map(|offer| SkinData {
+                    offer: offer.clone(),
+                    detail: hash.get(&offer.offer_id).unwrap().clone(),
+                    bonus_offer: None,
+                })
+                .collect();
 
-        let skins: Vec<_> = store
-            .skins_panel_layout
-            .single_item_store_offers
-            .iter()
-            .map(|offer| SkinData {
-                offer: offer.clone(),
-                detail: hash.get(&offer.offer_id).unwrap().clone(),
-                bonus_offer: None,
-            })
-            .collect();
+            let message = generate_store_messages(&user, skins);
+            send_webhooks(&webhooks, message).await;
 
-        let message = generate_store_messages(&user, skins);
-        send_webhooks(&webhooks, message).await;
-
-        println!(
-            "Invoked webhooks for user {}#{}",
-            user.game_name, user.tag_line
-        );
+            println!("Sent store of user {}#{}", user.game_name, user.tag_line);
+        }
     }
 }
 
